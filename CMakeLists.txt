@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.25)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
@@ -58,199 +58,22 @@ else()
     message(STATUS "Found Geode: $ENV{GEODE_SDK}")
 endif()
 
-if (MSVC)
-    # Some MSVC toolsets report _MSVC_LANG as 202004L under /std:c++latest.
-    # Geode currently hard-requires 202302L, so patch the local SDK check for MSVC.
-    set(_geode_platform_hpp "$ENV{GEODE_SDK}/loader/include/Geode/platform/platform.hpp")
-    set(_geode_event_hpp "$ENV{GEODE_SDK}/loader/include/Geode/loader/Event.hpp")
-    if (EXISTS "${_geode_platform_hpp}")
-        file(READ "${_geode_platform_hpp}" _geode_platform_content)
-        set(_geode_platform_original "${_geode_platform_content}")
-        string(REPLACE
-            "GEODE_CXX_STANDARD >= 202302L,"
-            "GEODE_CXX_STANDARD >= 202004L,"
-            _geode_platform_content
-            "${_geode_platform_content}"
-        )
-        if (NOT _geode_platform_content STREQUAL _geode_platform_original)
-            file(WRITE "${_geode_platform_hpp}" "${_geode_platform_content}")
-            message(STATUS "Applied MSVC compatibility patch to Geode platform.hpp C++ standard check")
-        endif()
-    endif()
-    if (EXISTS "${_geode_event_hpp}")
-        file(READ "${_geode_event_hpp}" _geode_event_content)
-        set(_geode_event_original "${_geode_event_content}")
-        string(REPLACE
-            "bool send(PArgs... args) noexcept(std::is_nothrow_invocable_v<geode::CopyableFunction<PReturn(PArgs...)>, PArgs...>);"
-            "bool send(PArgs... args);"
-            _geode_event_content
-            "${_geode_event_content}"
-        )
-        string(REPLACE
-            "::send(PArgs... args) noexcept(std::is_nothrow_invocable_v<geode::CopyableFunction<PReturn(PArgs...)>, PArgs...>) {"
-            "::send(PArgs... args) {"
-            _geode_event_content
-            "${_geode_event_content}"
-        )
-        if (NOT _geode_event_content STREQUAL _geode_event_original)
-            file(WRITE "${_geode_event_hpp}" "${_geode_event_content}")
-            message(STATUS "Applied MSVC compatibility patch to Geode Event.hpp send() noexcept")
-        endif()
-    endif()
+# This branch targets the loader bundled with 19gdps.com u9, not upstream Geode.
+file(READ "$ENV{GEODE_SDK}/VERSION" _geobot_sdk_version)
+string(STRIP "${_geobot_sdk_version}" _geobot_sdk_version)
+if (NOT _geobot_sdk_version STREQUAL "4.9.0")
+    message(FATAL_ERROR "Use qimiko/geode's gdps SDK (Geode 4.9.0); see docs/backport-1.9.md")
 endif()
-
-if (WIN32)
-    # Recent Windows bindings can pull in a Geode SDK cocos header with both
-    # non-virtual and virtual init() declarations. Clang rejects that duplicate
-    # member declaration while building GeodeBindings, so normalize the vendored
-    # header before the SDK targets are added.
-    set(_geode_file_utils_win32_h "$ENV{GEODE_SDK}/loader/include/Geode/cocos/platform/win32/CCFileUtilsWin32.h")
-    if (EXISTS "${_geode_file_utils_win32_h}")
-        file(READ "${_geode_file_utils_win32_h}" _geode_file_utils_win32_content)
-        set(_geode_file_utils_win32_original "${_geode_file_utils_win32_content}")
-        string(REPLACE
-            "    bool init();\n"
-            ""
-            _geode_file_utils_win32_content
-            "${_geode_file_utils_win32_content}"
-        )
-        if (NOT _geode_file_utils_win32_content STREQUAL _geode_file_utils_win32_original)
-            file(WRITE "${_geode_file_utils_win32_h}" "${_geode_file_utils_win32_content}")
-            message(STATUS "Applied Windows compatibility patch to Geode CCFileUtilsWin32.h duplicate init() declaration")
-        endif()
-    endif()
-endif()
-
+set(BINDINGS_VERSIONED_ONLY ON CACHE BOOL "Use the 1.920 enums" FORCE)
+set(GEODE_GD_VERSION "1.920")
+set(GEODE_COMP_GD_VERSION 19200)
 add_subdirectory($ENV{GEODE_SDK} ${CMAKE_CURRENT_BINARY_DIR}/geode)
-
-if (MSVC)
-    # ARC v1.5.3 uses a few C++23 constructs that still fail on some MSVC toolchains.
-    # Patch vendored headers in build/_deps so builds are reproducible without manual edits.
-    set(_arc_future_dir "${CMAKE_CURRENT_BINARY_DIR}/_deps/arc-src/include/arc/future")
-    set(_arc_pollable_hpp "${_arc_future_dir}/Pollable.hpp")
-    set(_arc_metadata_hpp "${_arc_future_dir}/PollableMetadata.hpp")
-    set(_arc_future_hpp "${_arc_future_dir}/Future.hpp")
-
-    if (EXISTS "${_arc_pollable_hpp}")
-        file(READ "${_arc_pollable_hpp}" _arc_pollable_content)
-        set(_arc_pollable_original "${_arc_pollable_content}")
-        string(REPLACE
-            "bool await_suspend(this auto& self, std::coroutine_handle<> h) noexcept(NothrowPoll) {\n        return self.template fastSuspend<Derived>(h);\n    }"
-            "bool await_suspend(std::coroutine_handle<> h) noexcept(NothrowPoll) {\n        return this->template fastSuspend<Derived>(h);\n    }"
-            _arc_pollable_content
-            "${_arc_pollable_content}"
-        )
-        string(REPLACE
-            "bool fastSuspend(this Derived& self, std::coroutine_handle<> h) {\n        constexpr bool IsNothrowPollable = ::arc::IsNothrowPollable<Derived>;\n\n        auto cx = contextFromHandle(h);\n        bool ready = self.template vPoll<IsNothrowPollable>(&self, *cx);\n        if (ready) {\n            // fast path - no need to attach to parent\n            return false;\n        }\n\n        // attach to parent and suspend\n        self.attachToParent(h);\n        return true;\n    }"
-            "bool fastSuspend(std::coroutine_handle<> h) {\n        constexpr bool IsNothrowPollable = ::arc::IsNothrowPollable<Derived>;\n\n        auto* self = static_cast<Derived*>(this);\n        auto cx = contextFromHandle(h);\n        bool ready = self->template vPoll<IsNothrowPollable>(self, *cx);\n        if (ready) {\n            // fast path - no need to attach to parent\n            return false;\n        }\n\n        // attach to parent and suspend\n        self->attachToParent(h);\n        return true;\n    }"
-            _arc_pollable_content
-            "${_arc_pollable_content}"
-        )
-        string(REPLACE
-            "constexpr auto meta = PollableMetadata::create<Derived>();"
-            "const auto meta = PollableMetadata::create<Derived>();"
-            _arc_pollable_content
-            "${_arc_pollable_content}"
-        )
-        string(REPLACE
-            "inline static constinit const PollableVtable vtable = [] {"
-            "inline static const PollableVtable vtable = [] {"
-            _arc_pollable_content
-            "${_arc_pollable_content}"
-        )
-        if (NOT _arc_pollable_content STREQUAL _arc_pollable_original)
-            file(WRITE "${_arc_pollable_hpp}" "${_arc_pollable_content}")
-            message(STATUS "Applied MSVC compatibility patch to arc/future/Pollable.hpp")
-        endif()
-    endif()
-
-    if (EXISTS "${_arc_metadata_hpp}")
-        file(READ "${_arc_metadata_hpp}" _arc_metadata_content)
-        set(_arc_metadata_original "${_arc_metadata_content}")
-        string(REPLACE
-            "static constexpr const PollableMetadata* create() {"
-            "static const PollableMetadata* create() {"
-            _arc_metadata_content
-            "${_arc_metadata_content}"
-        )
-        string(REPLACE
-            "static constexpr auto value = [] {"
-            "static const auto value = [] {"
-            _arc_metadata_content
-            "${_arc_metadata_content}"
-        )
-        if (NOT _arc_metadata_content STREQUAL _arc_metadata_original)
-            file(WRITE "${_arc_metadata_hpp}" "${_arc_metadata_content}")
-            message(STATUS "Applied MSVC compatibility patch to arc/future/PollableMetadata.hpp")
-        endif()
-    endif()
-
-    if (EXISTS "${_arc_future_hpp}")
-        file(READ "${_arc_future_hpp}" _arc_future_content)
-        set(_arc_future_original "${_arc_future_content}")
-        string(REPLACE
-            "static constexpr PollableVtable vtable {"
-            "inline static const PollableVtable vtable {"
-            _arc_future_content
-            "${_arc_future_content}"
-        )
-        string(REPLACE
-            "auto resume = [&] noexcept {"
-            "auto resume = [&] {"
-            _arc_future_content
-            "${_arc_future_content}"
-        )
-        if (NOT _arc_future_content STREQUAL _arc_future_original)
-            file(WRITE "${_arc_future_hpp}" "${_arc_future_content}")
-            message(STATUS "Applied MSVC compatibility patch to arc/future/Future.hpp")
-        endif()
-    endif()
+if (NOT GEODE_TARGET_PLATFORM MATCHES "^(Win32|Android32)$")
+    message(FATAL_ERROR "1.9 GDPS supports Win32 and Android32 only")
 endif()
-
-if (WIN32)
-    # bindings 2.2081 misses <sys/timeb.h> in a couple of inline files that use _ftime64_s.
-    # Re-apply this fix on configure so Codegen updates don't reintroduce build breaks.
-    # When GEODE_BINDINGS_REPO_PATH is set (by geode-sdk/build-geode-mod when bindings-ref is
-    # specified), the bindings are already cloned there before CMake runs.  Fall back to the CPM
-    # download location for local development builds.
-    if (DEFINED ENV{GEODE_BINDINGS_REPO_PATH})
-        set(_bindings_inline_dir "$ENV{GEODE_BINDINGS_REPO_PATH}/bindings/2.2081/inline")
-    else()
-        set(_bindings_inline_dir "${CMAKE_CURRENT_BINARY_DIR}/_deps/bindings-src/bindings/2.2081/inline")
-    endif()
-    foreach(_inline_file DialogLayer.cpp GameStatsManager.cpp)
-        set(_inline_path "${_bindings_inline_dir}/${_inline_file}")
-        if (EXISTS "${_inline_path}")
-            file(READ "${_inline_path}" _inline_content)
-            if (_inline_content MATCHES "__timeb64|_ftime64_s")
-                if (NOT _inline_content MATCHES "#include <sys/timeb.h>")
-                    string(REPLACE
-                        "#include <Geode/Bindings.hpp>\n"
-                        "#include <Geode/Bindings.hpp>\n\n#if defined(GEODE_IS_WINDOWS)\n#include <sys/timeb.h>\n#endif\n"
-                        _inline_content
-                        "${_inline_content}"
-                    )
-                    file(WRITE "${_inline_path}" "${_inline_content}")
-                    message(STATUS "Applied MSVC compatibility patch to ${_inline_file} (sys/timeb.h include)")
-                endif()
-            endif()
-        endif()
-    endforeach()
+if (NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
+    message(FATAL_ERROR "1.9 GDPS requires a 32-bit toolchain (Windows: -A Win32)")
 endif()
-if (TARGET GeodeBindings)
-    # MSVC 19.42 can ICE in Geode Event.hpp under Unity builds and also emit
-    # a large amount of duplicate object-name warnings in this target.
-    set_target_properties(GeodeBindings PROPERTIES UNITY_BUILD OFF)
-    if (MSVC)
-        target_compile_options(GeodeBindings PRIVATE
-            /FS
-            $<$<CONFIG:Release>:/Od /Ob0>
-            $<$<CONFIG:RelWithDebInfo>:/Od /Ob0>
-            $<$<CONFIG:MinSizeRel>:/Od /Ob0>
-        )
-    endif()
-endif()
-
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     GEOBOT_ENABLE_FRAMEPERFECT_DETECTION=$<BOOL:${geobot_ENABLE_FRAMEPERFECT_DETECTION}>
     GEOBOT_ENABLE_PATHFINDER=$<BOOL:${geobot_ENABLE_PATHFINDER}>
