@@ -33,7 +33,7 @@ class $modify(CCMenu) {
 	}
 };
 
-void LoadMacroLayer::open(geode::Popup* layer, geode::Popup* layer2, bool autosaves) {
+void LoadMacroLayer::open(FLAlertLayer* layer, FLAlertLayer* layer2, bool autosaves) {
 	std::filesystem::path path = Global::getFolderSettingPath("macros_folder");
 	if (!std::filesystem::exists(path))
 		return FLAlertLayer::create("Error", "There was an error getting the folder. ID: 6", "Ok")->show();
@@ -176,7 +176,7 @@ void LoadMacroLayer::onSelectAll(CCObject* obj) {
 	}
 }
 
-LoadMacroLayer* LoadMacroLayer::create(geode::Popup* layer, geode::Popup* layer2, bool autosaves) {
+LoadMacroLayer* LoadMacroLayer::create(FLAlertLayer* layer, FLAlertLayer* layer2, bool autosaves) {
 	LoadMacroLayer* ret = new LoadMacroLayer();
 	std::string texture = Utils::getTexture();
 	if (ret->initAnchored(385, 291, layer, layer2, autosaves, texture.c_str())) {
@@ -196,7 +196,7 @@ void LoadMacroLayer::onImportMacro(CCObject*) {
 	)->show();
 }
 
-bool LoadMacroLayer::setup(geode::Popup* layer, geode::Popup* layer2, bool autosaves) {
+bool LoadMacroLayer::setup(FLAlertLayer* layer, FLAlertLayer* layer2, bool autosaves) {
 
 	#ifdef GEODE_IS_ANDROID
 	invertSort = true;
@@ -613,7 +613,7 @@ void LoadMacroLayer::populateList(bool refresh, float prevScroll) {
 	}
 }
 
-MacroCell* MacroCell::create(std::filesystem::path path, std::string name, std::time_t date, geode::Popup* menuLayer, geode::Popup* mergeLayer, CCLayer* loadLayer) {
+MacroCell* MacroCell::create(std::filesystem::path path, std::string name, std::time_t date, FLAlertLayer* menuLayer, FLAlertLayer* mergeLayer, CCLayer* loadLayer) {
 	MacroCell* ret = new MacroCell();
 	if (!ret->init(path, name, date, menuLayer, mergeLayer, loadLayer)) {
 		delete ret;
@@ -624,7 +624,7 @@ MacroCell* MacroCell::create(std::filesystem::path path, std::string name, std::
 	return ret;
 }
 
-bool MacroCell::init(std::filesystem::path path, std::string name, std::time_t date, geode::Popup* menuLayer, geode::Popup* mergeLayer, CCLayer* loadLayer) {
+bool MacroCell::init(std::filesystem::path path, std::string name, std::time_t date, FLAlertLayer* menuLayer, FLAlertLayer* mergeLayer, CCLayer* loadLayer) {
 
 	this->path = path;
 	this->date = date;
@@ -831,7 +831,7 @@ void MacroCell::handleLoad() {
     g.macro.geobotMacro = g.macro.botInfo.name == "geobot";
 
 	// Capture member variables before keyBackClicked() frees 'this' via recursive child cleanup.
-	geode::Popup* capturedMenuLayer = menuLayer;
+	FLAlertLayer* capturedMenuLayer = menuLayer;
 	bool isXdMacro = path.extension() == ".xd";
 
 	loadLayer->keyBackClicked();

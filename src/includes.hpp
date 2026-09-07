@@ -60,24 +60,24 @@ inline void detachActiveInputsRecursive(CCNode* root) {
 
 namespace xdb {
 template <class... SetupArgs>
-class Popup : public geode::Popup {
+class Popup : public geode::Popup<SetupArgs...> {
 protected:
     virtual bool setup(SetupArgs... args) = 0;
 
     void adjustForLoadingScreen(bool includeTitle = true) {
-        cocos2d::CCPoint offset = (cocos2d::CCDirector::sharedDirector()->getWinSize() - m_mainLayer->getContentSize()) / 2;
-        m_mainLayer->setPosition(m_mainLayer->getPosition() - offset);
-        m_closeBtn->setPosition(m_closeBtn->getPosition() + offset);
-        m_bgSprite->setPosition(m_bgSprite->getPosition() + offset);
+        cocos2d::CCPoint offset = (cocos2d::CCDirector::sharedDirector()->getWinSize() - this->m_mainLayer->getContentSize()) / 2;
+        this->m_mainLayer->setPosition(this->m_mainLayer->getPosition() - offset);
+        this->m_closeBtn->setPosition(this->m_closeBtn->getPosition() + offset);
+        this->m_bgSprite->setPosition(this->m_bgSprite->getPosition() + offset);
 
-        if (includeTitle && m_title)
-            m_title->setPosition(m_title->getPosition() + offset);
+        if (includeTitle && this->m_title)
+            this->m_title->setPosition(this->m_title->getPosition() + offset);
     }
 
 public:
     void onExit() override {
         detachActiveInputsRecursive(this);
-        geode::Popup::onExit();
+        geode::Popup<SetupArgs...>::onExit();
     }
 
     bool initAnchored(
@@ -85,10 +85,10 @@ public:
         float height,
         SetupArgs... args,
         char const* bg = "GJ_square01.png",
-        cocos2d::CCRect bgRect = {}
+        cocos2d::CCRect bgRect = { 0, 0, 80, 80 }
     ) {
-        if (!this->init(width, height, bg, bgRect)) return false;
-        return this->setup(std::forward<SetupArgs>(args)...);
+        return geode::Popup<SetupArgs...>::initAnchored(width, height, std::forward<SetupArgs>(args)..., bg, bgRect);
+
     }
 };
 }
@@ -193,7 +193,7 @@ public:
     static void stopPathfinderAutoSearch(bool preserveStatus = false);
 
     Mod* mod = Mod::get();
-    geode::Popup* layer = nullptr;
+    FLAlertLayer* layer = nullptr;
 
     Macro macro;
     Renderer renderer;

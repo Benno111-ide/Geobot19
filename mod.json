@@ -1,9 +1,8 @@
 {
-    "geode": "5.2.0",
+    "geode": "4.9.0",
     "gd": {
-        "win": "2.2081",
-        "android": "2.2081",
-        "ios": "2.2081"
+        "win": "1.920",
+        "android": "1.920"
     },
     "version": "2.0.0",
     "id": "benno111.geobot.dev",
@@ -19,11 +18,6 @@
     "issues": {
         "info": "Report bugs and feature requests on the GitHub issue tracker.",
         "url": "https://github.com/Benno111/geobot/issues/new"
-    },
-    "dependencies": {
-        "geode.node-ids": {
-            "version": ">=1.23.0"
-        }
     },
     "settings": {
         "feature_flag_frameperfect_detection": {
